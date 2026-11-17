@@ -165,10 +165,92 @@ type AuthConfig struct {
 	Template             *ASN1DN               `json:"template,omitempty"`
 	Claims               *provisioner.Claims   `json:"claims,omitempty"`
 	Policy               *policy.Options       `json:"policy,omitempty"`
+	Events               *EventsConfig         `json:"events,omitempty"`
 	DisableIssuedAtCheck bool                  `json:"disableIssuedAtCheck,omitempty"`
 	Backdate             *provisioner.Duration `json:"backdate,omitempty"`
 	EnableAdmin          bool                  `json:"enableAdmin,omitempty"`
 	DisableGetSSHHosts   bool                  `json:"disableGetSSHHosts,omitempty"`
+}
+
+// EventsConfig configures the delivery of certificate lifecycle events
+// (issuance, renewal, rekey) to webhook receivers. It serves audit and
+// security governance requirements: every lifecycle transition is recorded
+// durably and delivered with retries, so that downstream audit systems can
+// observe the complete lifecycle of every certificate.
+type EventsConfig struct {
+	// Webhooks lists the event receivers. If empty, no events are
+	// emitted and the CA behaves exactly as before.
+	Webhooks []EventWebhook `json:"webhooks,omitempty"`
+	// QueueSize is the size of the in-memory delivery queue. Events that
+	// do not fit remain persisted and are delivered later; they are never
+	// dropped.
+	QueueSize int `json:"queueSize,omitempty"`
+	// RateLimit is the maximum number of delivery attempts per second. It
+	// throttles delivery when events pile up instead of dropping them.
+	RateLimit float64 `json:"rateLimit,omitempty"`
+	// Retry configures the retry behavior of failed deliveries.
+	Retry *EventRetryConfig `json:"retry,omitempty"`
+}
+
+// EventWebhook configures a single event receiver.
+type EventWebhook struct {
+	// URL is the endpoint events are POSTed to.
+	URL string `json:"url"`
+	// Events lists the event types this receiver subscribes to, e.g.
+	// ["x509.signed", "x509.renewed"]. An empty list subscribes to all
+	// event types.
+	Events []string `json:"events,omitempty"`
+	// Token, if set, is sent as a bearer token in the Authorization
+	// header.
+	Token string `json:"token,omitempty"`
+}
+
+// EventRetryConfig configures the retry behavior of failed event
+// deliveries.
+type EventRetryConfig struct {
+	// MaxAttempts is the maximum number of delivery attempts, including
+	// the first one. Afterwards the event is marked as failed and remains
+	// queryable for reconciliation.
+	MaxAttempts int `json:"maxAttempts,omitempty"`
+	// InitialBackoff is the delay before the first retry.
+	InitialBackoff *provisioner.Duration `json:"initialBackoff,omitempty"`
+	// MaxBackoff caps the exponential backoff.
+	MaxBackoff *provisioner.Duration `json:"maxBackoff,omitempty"`
+	// Multiplier is the exponential backoff multiplier.
+	Multiplier float64 `json:"multiplier,omitempty"`
+}
+
+// Validate validates the events configuration.
+func (c *EventsConfig) Validate() error {
+	if c == nil {
+		return nil
+	}
+	for _, wh := range c.Webhooks {
+		if wh.URL == "" {
+			return errors.New("authority.events.webhooks[].url cannot be empty")
+		}
+	}
+	if c.QueueSize < 0 {
+		return errors.New("authority.events.queueSize cannot be less than 0")
+	}
+	if c.RateLimit < 0 {
+		return errors.New("authority.events.rateLimit cannot be less than 0")
+	}
+	if r := c.Retry; r != nil {
+		if r.MaxAttempts < 0 {
+			return errors.New("authority.events.retry.maxAttempts cannot be less than 0")
+		}
+		if r.InitialBackoff != nil && r.InitialBackoff.Duration < 0 {
+			return errors.New("authority.events.retry.initialBackoff cannot be less than 0")
+		}
+		if r.MaxBackoff != nil && r.MaxBackoff.Duration < 0 {
+			return errors.New("authority.events.retry.maxBackoff cannot be less than 0")
+		}
+		if r.Multiplier < 0 {
+			return errors.New("authority.events.retry.multiplier cannot be less than 0")
+		}
+	}
+	return nil
 }
 
 // init initializes the required fields in the AuthConfig if they are not
@@ -209,6 +291,10 @@ func (c *AuthConfig) Validate(provisioner.Audiences) error {
 
 	if c.Backdate.Duration < 0 {
 		return errors.New("authority.backdate cannot be less than 0")
+	}
+
+	if err := c.Events.Validate(); err != nil {
+		return err
 	}
 
 	return nil

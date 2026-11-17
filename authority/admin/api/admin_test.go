@@ -20,7 +20,9 @@ import (
 
 	"github.com/smallstep/assert"
 	"github.com/smallstep/certificates/authority/admin"
+	"github.com/smallstep/certificates/authority/events"
 	"github.com/smallstep/certificates/authority/provisioner"
+	"github.com/smallstep/certificates/db"
 )
 
 type mockAdminAuthority struct {
@@ -44,6 +46,23 @@ type mockAdminAuthority struct {
 	MockCreateAuthorityPolicy func(ctx context.Context, adm *linkedca.Admin, policy *linkedca.Policy) (*linkedca.Policy, error)
 	MockUpdateAuthorityPolicy func(ctx context.Context, adm *linkedca.Admin, policy *linkedca.Policy) (*linkedca.Policy, error)
 	MockRemoveAuthorityPolicy func(ctx context.Context) error
+
+	MockListEventRecords   func(status string, from, to time.Time) ([]*db.EventRecord, error)
+	MockEventDeliveryStats func() (*events.Stats, error)
+}
+
+func (m *mockAdminAuthority) ListEventRecords(status string, from, to time.Time) ([]*db.EventRecord, error) {
+	if m.MockListEventRecords != nil {
+		return m.MockListEventRecords(status, from, to)
+	}
+	return m.MockRet1.([]*db.EventRecord), m.MockErr
+}
+
+func (m *mockAdminAuthority) EventDeliveryStats() (*events.Stats, error) {
+	if m.MockEventDeliveryStats != nil {
+		return m.MockEventDeliveryStats()
+	}
+	return m.MockRet1.(*events.Stats), m.MockErr
 }
 
 func (m *mockAdminAuthority) IsAdminAPIEnabled() bool {

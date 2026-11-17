@@ -16,6 +16,7 @@ type router struct {
 	acmeResponder    ACMEAdminResponder
 	policyResponder  PolicyAdminResponder
 	webhookResponder WebhookAdminResponder
+	eventsResponder  EventsAdminResponder
 }
 
 type RouterOption func(*router)
@@ -35,6 +36,13 @@ func WithPolicyResponder(policyResponder PolicyAdminResponder) RouterOption {
 func WithWebhookResponder(webhookResponder WebhookAdminResponder) RouterOption {
 	return func(r *router) {
 		r.webhookResponder = webhookResponder
+	}
+}
+
+// WithEventsResponder adds the events responder to the router.
+func WithEventsResponder(eventsResponder EventsAdminResponder) RouterOption {
+	return func(r *router) {
+		r.eventsResponder = eventsResponder
 	}
 }
 
@@ -129,5 +137,12 @@ func Route(r api.Router, options ...RouterOption) {
 		r.MethodFunc("POST", "/provisioners/{provisionerName}/webhooks", webhookMiddleware(router.webhookResponder.CreateProvisionerWebhook))
 		r.MethodFunc("PUT", "/provisioners/{provisionerName}/webhooks/{webhookName}", webhookMiddleware(router.webhookResponder.UpdateProvisionerWebhook))
 		r.MethodFunc("DELETE", "/provisioners/{provisionerName}/webhooks/{webhookName}", webhookMiddleware(router.webhookResponder.DeleteProvisionerWebhook))
+	}
+
+	if router.eventsResponder != nil {
+		// Certificate lifecycle event delivery records and stats, used
+		// for audit reconciliation.
+		r.MethodFunc("GET", "/events", authnz(enabledInStandalone(router.eventsResponder.GetEvents)))
+		r.MethodFunc("GET", "/events/stats", authnz(enabledInStandalone(router.eventsResponder.GetEventsStats)))
 	}
 }

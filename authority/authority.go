@@ -27,6 +27,7 @@ import (
 	adminDBNosql "github.com/smallstep/certificates/authority/admin/db/nosql"
 	"github.com/smallstep/certificates/authority/administrator"
 	"github.com/smallstep/certificates/authority/config"
+	"github.com/smallstep/certificates/authority/events"
 	"github.com/smallstep/certificates/authority/internal/constraints"
 	"github.com/smallstep/certificates/authority/policy"
 	"github.com/smallstep/certificates/authority/provisioner"
@@ -113,6 +114,10 @@ type Authority struct {
 
 	// Called whenever applicable, in order to instrument the authority.
 	meter Meter
+
+	// Delivers certificate lifecycle events to configured webhooks. It is
+	// nil when no event webhooks are configured.
+	events *events.Dispatcher
 }
 
 // Info contains information about the authority.
@@ -358,6 +363,11 @@ func (a *Authority) init() error {
 			return err
 		}
 	}
+
+	// Initialize the lifecycle event dispatcher if event webhooks are
+	// configured. When not configured, no events are emitted and the CA
+	// behaves exactly as before.
+	a.initEvents()
 
 	// Initialize key manager if it has not been set in the options.
 	if a.keyManager == nil {
@@ -937,6 +947,9 @@ func (a *Authority) IsAdminAPIEnabled() bool {
 
 // Shutdown safely shuts down any clients, databases, etc. held by the Authority.
 func (a *Authority) Shutdown() error {
+	if a.events != nil {
+		a.events.Stop()
+	}
 	if a.crlTicker != nil {
 		a.crlTicker.Stop()
 		close(a.crlStopper)
@@ -950,6 +963,9 @@ func (a *Authority) Shutdown() error {
 
 // CloseForReload closes internal services, to allow a safe reload.
 func (a *Authority) CloseForReload() {
+	if a.events != nil {
+		a.events.Stop()
+	}
 	if a.crlTicker != nil {
 		a.crlTicker.Stop()
 		close(a.crlStopper)

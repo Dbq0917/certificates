@@ -26,6 +26,7 @@ import (
 	"go.step.sm/crypto/x509util"
 
 	"github.com/smallstep/certificates/authority/config"
+	"github.com/smallstep/certificates/authority/events"
 	"github.com/smallstep/certificates/authority/provisioner"
 	casapi "github.com/smallstep/certificates/cas/apiv1"
 	"github.com/smallstep/certificates/db"
@@ -119,6 +120,9 @@ func (a *Authority) Sign(csr *x509.CertificateRequest, signOpts provisioner.Sign
 func (a *Authority) SignWithContext(ctx context.Context, csr *x509.CertificateRequest, signOpts provisioner.SignOptions, extraOpts ...provisioner.SignOption) ([]*x509.Certificate, error) {
 	chain, prov, err := a.signX509(ctx, csr, signOpts, extraOpts...)
 	a.meter.X509Signed(chain, prov, err)
+	if err == nil {
+		a.notifyEvent(events.TypeX509Signed, chain, prov, nil)
+	}
 	return chain, err
 }
 
@@ -373,8 +377,14 @@ func (a *Authority) RenewContext(ctx context.Context, oldCert *x509.Certificate,
 	chain, prov, err := a.renewContext(ctx, oldCert, pk)
 	if pk == nil {
 		a.meter.X509Renewed(chain, prov, err)
+		if err == nil {
+			a.notifyEvent(events.TypeX509Renewed, chain, prov, oldCert)
+		}
 	} else {
 		a.meter.X509Rekeyed(chain, prov, err)
+		if err == nil {
+			a.notifyEvent(events.TypeX509Rekeyed, chain, prov, oldCert)
+		}
 	}
 	return chain, err
 }

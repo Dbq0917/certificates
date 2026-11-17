@@ -288,12 +288,14 @@ func (ca *CA) Init(cfg *config.Config) (*CA, error) {
 			acmeAdminResponder := adminAPI.NewACMEAdminResponder()
 			policyAdminResponder := adminAPI.NewPolicyAdminResponder()
 			webhookAdminResponder := adminAPI.NewWebhookAdminResponder()
+			eventsAdminResponder := adminAPI.NewEventsAdminResponder()
 			mux.Route("/admin", func(r chi.Router) {
 				adminAPI.Route(
 					r,
 					adminAPI.WithACMEResponder(acmeAdminResponder),
 					adminAPI.WithPolicyResponder(policyAdminResponder),
 					adminAPI.WithWebhookResponder(webhookAdminResponder),
+					adminAPI.WithEventsResponder(eventsAdminResponder),
 				)
 			})
 		}

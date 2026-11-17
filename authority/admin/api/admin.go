@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -12,7 +13,9 @@ import (
 	"github.com/smallstep/certificates/api/read"
 	"github.com/smallstep/certificates/api/render"
 	"github.com/smallstep/certificates/authority/admin"
+	"github.com/smallstep/certificates/authority/events"
 	"github.com/smallstep/certificates/authority/provisioner"
+	"github.com/smallstep/certificates/db"
 )
 
 type adminAuthority interface {
@@ -33,6 +36,8 @@ type adminAuthority interface {
 	CreateAuthorityPolicy(ctx context.Context, admin *linkedca.Admin, policy *linkedca.Policy) (*linkedca.Policy, error)
 	UpdateAuthorityPolicy(ctx context.Context, admin *linkedca.Admin, policy *linkedca.Policy) (*linkedca.Policy, error)
 	RemoveAuthorityPolicy(ctx context.Context) error
+	ListEventRecords(status string, from, to time.Time) ([]*db.EventRecord, error)
+	EventDeliveryStats() (*events.Stats, error)
 }
 
 // CreateAdminRequest represents the body for a CreateAdmin request.
